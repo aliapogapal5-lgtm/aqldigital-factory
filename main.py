@@ -2,6 +2,7 @@
 import os
 import json
 import time
+from datetime import date
 from google import genai
 from openai import OpenAI
 
@@ -9,30 +10,60 @@ CHANNEL_NAME = "Modern Technology"
 
 PROMPT = """
 أنت كاتب محتوى محترف لقناة Modern Technology.
-أنشئ فكرة فيديو YouTube Shorts جديدة باللغة العربية المصرية.
+أنشئ فيديو YouTube Shorts باللغة العربية المصرية.
 
-المجال: أدوات الذكاء الاصطناعي ومواقع الربح والعمل الحر.
+المجال: الذكاء الاصطناعي والتكنولوجيا والعمل الحر.
 المدة: 20 إلى 30 ثانية.
+بدون تعليق صوتي، نصوص على الشاشة وموسيقى فقط.
 
-اكتب:
-1. عنوان جذاب.
-2. مقدمة تشد الانتباه.
-3. نص مختصر مقسم إلى 4 مشاهد.
-4. وصف الفيديو.
-5. خمسة هاشتاجات.
-
-الفيديو بدون تعليق صوتي، يعتمد على النصوص الظاهرة
-على الشاشة والموسيقى فقط.
-
-أعد النتيجة بصيغة JSON فقط بهذا الشكل:
+أعد JSON فقط:
 {
-  "title": "العنوان",
-  "intro": "المقدمة",
+  "title": "عنوان جذاب",
+  "intro": "مقدمة تشد الانتباه",
   "scenes": ["المشهد الأول", "المشهد الثاني", "المشهد الثالث", "المشهد الرابع"],
-  "description": "الوصف",
-  "hashtags": ["#ذكاء_اصطناعي"]
+  "description": "وصف الفيديو",
+  "hashtags": ["#تكنولوجيا"]
 }
 """
+
+FALLBACKS = [
+    {
+        "title": "موقع يوفر عليك وقت التصميم",
+        "intro": "لسه بتصمم كل حاجة من الصفر؟",
+        "scenes": [
+            "في أدوات بتساعدك تبدأ تصميمك بسرعة",
+            "اختار قالب مناسب لمشروعك",
+            "عدّل الألوان والنصوص والصور",
+            "احفظ تصميمك وابدأ شغلك"
+        ],
+        "description": "نصائح بسيطة لتطوير مهارات التصميم.",
+        "hashtags": ["#تصميم", "#تكنولوجيا", "#ModernTechnology"]
+    },
+    {
+        "title": "3 مهارات رقمية اتعلمها",
+        "intro": "عايز تبدأ شغل أونلاين؟",
+        "scenes": [
+            "اتعلم تصميم الصور",
+            "اتعلم مونتاج الفيديو",
+            "اتعلم استخدام أدوات الذكاء الاصطناعي",
+            "ابدأ بمشروع صغير وطور مهاراتك"
+        ],
+        "description": "مهارات رقمية مفيدة للمبتدئين.",
+        "hashtags": ["#العمل_الحر", "#مهارات", "#ModernTechnology"]
+    },
+    {
+        "title": "استغل الذكاء الاصطناعي صح",
+        "intro": "الذكاء الاصطناعي ممكن يساعدك في شغلك!",
+        "scenes": [
+            "استخدمه لتوليد الأفكار",
+            "استفد منه في كتابة المحتوى",
+            "نظم مهامك ووقتك",
+            "راجع النتائج بنفسك قبل النشر"
+        ],
+        "description": "طرق عملية للاستفادة من الذكاء الاصطناعي.",
+        "hashtags": ["#ذكاء_اصطناعي", "#AI", "#ModernTechnology"]
+    }
+]
 
 def clean_json(result):
     result = result.strip()
@@ -46,7 +77,7 @@ def generate_with_gemini():
 
     client = genai.Client(api_key=api_key)
     response = client.models.generate_content(
-        model="gemini-3.8-flash",
+        model="gemini-2.5-flash",
         contents=PROMPT
     )
     return clean_json(response.text)
@@ -60,28 +91,26 @@ def generate_with_sambanova():
         api_key=api_key,
         base_url="https://api.sambanova.ai/v1"
     )
-
     response = client.chat.completions.create(
         model="Meta-Llama-3.3-70B-Instruct",
         messages=[{"role": "user", "content": PROMPT}],
         temperature=0.7
     )
-
     return clean_json(response.choices[0].message.content)
 
 def generate_daily_script():
     data = None
 
-    for attempt in range(1):
+    for attempt in range(3):
         try:
-            print(f"Trying Gemini (attempt {attempt + 1})...")
+            print(f"Trying Gemini ({attempt + 1}/3)...")
             data = generate_with_gemini()
             print("Gemini succeeded!")
             break
         except Exception as error:
             print(f"Gemini failed: {error}")
-            if attempt == 0:
-                time.sleep(5)
+            if attempt < 2:
+                time.sleep(15)
 
     if data is None:
         try:
@@ -90,12 +119,16 @@ def generate_daily_script():
             print("SambaNova succeeded!")
         except Exception as error:
             print(f"SambaNova failed: {error}")
-            raise RuntimeError("Both AI providers failed") from error
+
+    if data is None:
+        index = date.today().toordinal() % len(FALLBACKS)
+        data = FALLBACKS[index]
+        print("Using offline fallback content.")
 
     with open("daily_content.json", "w", encoding="utf-8") as file:
         json.dump(data, file, ensure_ascii=False, indent=2)
 
-    print("New content generated successfully!")
+    print("Content ready!")
     print(json.dumps(data, ensure_ascii=False, indent=2))
 
 if __name__ == "__main__":
