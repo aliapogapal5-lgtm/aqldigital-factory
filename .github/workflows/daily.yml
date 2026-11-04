@@ -1,0 +1,48 @@
+
+name: Modern Technology Daily Factory
+
+on:
+  schedule:
+    - cron: "0 15 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  create-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Get project files
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python libraries
+        run: |
+          pip install -r requirements.txt
+
+      - name: Generate daily content
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python main.py
+
+      - name: Create video
+        run: python video_maker.py
+
+      - name: Save generated video
+        uses: actions/upload-artifact@v4
+        with:
+          name: modern-technology-video
+          path: modern_technology.mp4
+          retention-days: 7
