@@ -72,7 +72,7 @@ def generate_with_sambanova():
 def generate_daily_script():
     data = None
 
-    for attempt in range(2):
+    for attempt in range(1):
         try:
             print(f"Trying Gemini (attempt {attempt + 1})...")
             data = generate_with_gemini()
