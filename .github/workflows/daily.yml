@@ -1,5 +1,5 @@
 
-name: Modern Technology Daily Factory.
+name: Modern Technology Daily Factory
 
 on:
   schedule:
@@ -35,6 +35,7 @@ jobs:
       - name: Generate daily content
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SAMBANOVA_API_KEY: ${{ secrets.SAMBANOVA_API_KEY }}
         run: python main.py
 
       - name: Create video
