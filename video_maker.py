@@ -1,4 +1,5 @@
 
+
 import os
 import json
 import subprocess
@@ -6,6 +7,13 @@ from PIL import Image, ImageDraw, ImageFont
 
 WIDTH = 1080
 HEIGHT = 1920
+SCENE_DURATION = 5
+FPS = 30
+
+ASSETS = "assets"
+LOGO = os.path.join(ASSETS, "logo.jpg")
+MUSIC = os.path.join(ASSETS, "background.mp3")
+
 
 def get_font(size):
     paths = [
@@ -17,41 +25,52 @@ def get_font(size):
             return ImageFont.truetype(path, size)
     return ImageFont.load_default()
 
+
 def create_scene(text, number):
-    image = Image.new("RGB", (WIDTH, HEIGHT), (12, 18, 38))
+    image = Image.new("RGB", (WIDTH, HEIGHT))
     draw = ImageDraw.Draw(image)
 
-    # خلفية تقنية متدرجة
+    # خلفية متدرجة
     for y in range(HEIGHT):
-        shade = int(18 + (y / HEIGHT) * 35)
-        draw.line((0, y, WIDTH, y), fill=(shade, 20, shade + 35))
+        shade = int(12 + (y / HEIGHT) * 30)
+        draw.line(
+            (0, y, WIDTH, y),
+            fill=(shade, 20, shade + 35)
+        )
 
-    # اسم القناة
+    # الشعار واسم القناة
+    if os.path.exists(LOGO):
+        logo = Image.open(LOGO).convert("RGBA")
+        logo.thumbnail((115, 115))
+        image.paste(logo, (65, 65), logo)
+
     draw.text(
-        (WIDTH - 70, 100),
+        (205, 105),
         "MODERN TECHNOLOGY",
-        font=get_font(43),
+        font=get_font(38),
         fill=(80, 190, 255),
-        anchor="ra"
+        anchor="lm"
     )
 
     # خط ديكوري
     draw.rounded_rectangle(
-        (100, 250, 980, 260),
+        (80, 230, 1000, 240),
         radius=5,
         fill=(40, 150, 255)
     )
 
-    # نص المشهد
-    font = get_font(72)
+    # كتابة النص
+    font = get_font(70)
     words = text.split()
     lines = []
     current = ""
 
     for word in words:
         test = current + " " + word if current else word
+
         if draw.textbbox((0, 0), test, font=font)[2] > 850:
-            lines.append(current)
+            if current:
+                lines.append(current)
             current = word
         else:
             current = test
@@ -59,7 +78,7 @@ def create_scene(text, number):
     if current:
         lines.append(current)
 
-    y = 750 - (len(lines) * 55)
+    y = 800 - (len(lines) * 65)
 
     for line in lines:
         draw.text(
@@ -70,18 +89,19 @@ def create_scene(text, number):
             anchor="mm",
             direction="rtl"
         )
-        y += 125
+        y += 135
 
     # رقم المشهد
     draw.text(
-        (WIDTH // 2, 1600),
-        f"SCENE {number}",
+        (WIDTH // 2, 1650),
+        f"{number:02d} / 04",
         font=get_font(38),
         fill=(100, 190, 255),
         anchor="mm"
     )
 
     return image
+
 
 def make_video():
     with open("daily_content.json", encoding="utf-8") as f:
@@ -90,9 +110,17 @@ def make_video():
     scenes = data.get("scenes", [])
 
     if not scenes:
-        raise ValueError("No scenes found in daily_content.json")
+        raise ValueError("No scenes found")
 
     os.makedirs("frames", exist_ok=True)
+
+    # حذف ملفات المشاهد القديمة
+    for filename in os.listdir("frames"):
+        if filename.endswith((".png", ".mp4")):
+            os.remove(os.path.join("frames", filename))
+
+    # إنشاء صور المشاهد
+    frame_files = []
 
     for index, scene in enumerate(scenes, start=1):
         if isinstance(scene, dict):
@@ -104,33 +132,73 @@ def make_video():
             continue
 
         image = create_scene(text, index)
-        image.save(f"frames/scene_{index:02d}.png")
-
-    frame_files = sorted(
-        f for f in os.listdir("frames") if f.endswith(".png")
-    )
+        filename = f"frames/scene_{index:02d}.png"
+        image.save(filename)
+        frame_files.append(filename)
 
     if not frame_files:
-        raise ValueError("No valid scenes to render")
+        raise ValueError("No valid scenes")
 
+    # تحويل كل مشهد إلى فيديو متحرك
+    video_files = []
+
+    for index, filename in enumerate(frame_files, start=1):
+        output = f"frames/clip_{index:02d}.mp4"
+
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-loop", "1",
+            "-i", filename,
+            "-t", str(SCENE_DURATION),
+            "-vf",
+            "zoompan=z='min(zoom+0.0005,1.08)':"
+            "x='iw/2-(iw/zoom/2)':"
+            "y='ih/2-(ih/zoom/2)':"
+            "d=1:s=1080x1920:fps=30,"
+            "format=yuv420p",
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            output
+        ], check=True)
+
+        video_files.append(output)
+
+    # دمج المشاهد
     with open("frames.txt", "w", encoding="utf-8") as f:
-        for filename in frame_files:
-            f.write(f"file 'frames/{filename}'\n")
-            f.write("duration 5\n")
-        f.write(f"file 'frames/{frame_files[-1]}'\n")
+        for filename in video_files:
+            f.write(f"file '{filename}'\n")
 
     subprocess.run([
         "ffmpeg", "-y",
         "-f", "concat",
         "-safe", "0",
         "-i", "frames.txt",
-        "-vf", "fps=30,format=yuv420p",
-        "-c:v", "libx264",
-        "-movflags", "+faststart",
-        "modern_technology.mp4"
+        "-c", "copy",
+        "joined.mp4"
     ], check=True)
 
-    print("Video created: modern_technology.mp4")
+    # إضافة الموسيقى
+    if os.path.exists(MUSIC):
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-i", "joined.mp4",
+            "-stream_loop", "-1",
+            "-i", MUSIC,
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-shortest",
+            "-movflags", "+faststart",
+            "modern_technology.mp4"
+        ], check=True)
+    else:
+        os.replace("joined.mp4", "modern_technology.mp4")
+
+    print("Video created successfully!")
+
 
 if __name__ == "__main__":
     make_video()
+
