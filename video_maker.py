@@ -1,18 +1,16 @@
 
-
 import os
 import json
 import subprocess
 from PIL import Image, ImageDraw, ImageFont
+from video_library import download_video
 
 WIDTH = 1080
 HEIGHT = 1920
-SCENE_DURATION = 5
 FPS = 30
 
-ASSETS = "assets"
-LOGO = os.path.join(ASSETS, "logo.jpg")
-MUSIC = os.path.join(ASSETS, "background.mp3")
+LOGO = "assets/logo.jpg"
+MUSIC = "assets/background.mp3"
 
 
 def get_font(size):
@@ -26,42 +24,35 @@ def get_font(size):
     return ImageFont.load_default()
 
 
-def create_scene(text, number):
-    image = Image.new("RGB", (WIDTH, HEIGHT))
+def create_overlay(text, number):
+    image = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
 
-    # خلفية متدرجة
-    for y in range(HEIGHT):
-        shade = int(12 + (y / HEIGHT) * 30)
-        draw.line(
-            (0, y, WIDTH, y),
-            fill=(shade, 20, shade + 35)
-        )
+    # شريط علوي
+    draw.rectangle((0, 0, WIDTH, 190), fill=(0, 0, 0, 150))
 
-    # الشعار واسم القناة
     if os.path.exists(LOGO):
         logo = Image.open(LOGO).convert("RGBA")
-        logo.thumbnail((115, 115))
-        image.paste(logo, (65, 65), logo)
+        logo.thumbnail((110, 110))
+        image.alpha_composite(logo, (45, 35))
 
     draw.text(
-        (205, 105),
+        (190, 90),
         "MODERN TECHNOLOGY",
         font=get_font(38),
-        fill=(80, 190, 255),
+        fill=(80, 190, 255, 255),
         anchor="lm"
     )
 
-    # خط ديكوري
+    # خلفية النص
     draw.rounded_rectangle(
-        (80, 230, 1000, 240),
-        radius=5,
-        fill=(40, 150, 255)
+        (55, 650, 1025, 1240),
+        radius=35,
+        fill=(0, 0, 0, 175)
     )
 
-    # كتابة النص
-    font = get_font(70)
-    words = text.split()
+    font = get_font(65)
+    words = str(text).split()
     lines = []
     current = ""
 
@@ -78,29 +69,32 @@ def create_scene(text, number):
     if current:
         lines.append(current)
 
-    y = 800 - (len(lines) * 65)
+    y = 900 - len(lines) * 65
 
     for line in lines:
         draw.text(
-            (WIDTH // 2, y),
+            (540, y),
             line,
             font=font,
             fill="white",
             anchor="mm",
             direction="rtl"
         )
-        y += 135
+        y += 130
 
-    # رقم المشهد
     draw.text(
-        (WIDTH // 2, 1650),
-        f"{number:02d} / 04",
-        font=get_font(38),
-        fill=(100, 190, 255),
+        (540, 1770),
+        f"MODERN TECHNOLOGY  |  {number:02d}",
+        font=get_font(30),
+        fill=(100, 200, 255, 255),
         anchor="mm"
     )
 
     return image
+
+
+def run_ffmpeg(args):
+    subprocess.run(args, check=True)
 
 
 def make_video():
@@ -114,15 +108,10 @@ def make_video():
 
     os.makedirs("frames", exist_ok=True)
 
-    # حذف ملفات المشاهد القديمة
-    for filename in os.listdir("frames"):
-        if filename.endswith((".png", ".mp4")):
-            os.remove(os.path.join("frames", filename))
-
-    # إنشاء صور المشاهد
-    frame_files = []
+    clips = []
 
     for index, scene in enumerate(scenes, start=1):
+
         if isinstance(scene, dict):
             text = scene.get("text", scene.get("description", ""))
         else:
@@ -131,55 +120,63 @@ def make_video():
         if not text.strip():
             continue
 
-        image = create_scene(text, index)
-        filename = f"frames/scene_{index:02d}.png"
-        image.save(filename)
-        frame_files.append(filename)
+        print("Preparing scene:", index)
 
-    if not frame_files:
-        raise ValueError("No valid scenes")
+        video_path = f"frames/video_{index}.mp4"
+        overlay_path = f"frames/overlay_{index}.png"
+        output_path = f"frames/final_{index}.mp4"
 
-    # تحويل كل مشهد إلى فيديو متحرك
-    video_files = []
+        overlay = create_overlay(text, index)
+        overlay.save(overlay_path)
 
-    for index, filename in enumerate(frame_files, start=1):
-        output = f"frames/clip_{index:02d}.mp4"
+        downloaded = False
 
-        subprocess.run([
+        try:
+            downloaded = download_video(text, video_path)
+        except Exception as error:
+            print("Video download failed:", error)
+
+        if not downloaded:
+            raise RuntimeError(
+                f"No suitable video downloaded for scene {index}"
+            )
+
+        run_ffmpeg([
             "ffmpeg", "-y",
-            "-loop", "1",
-            "-i", filename,
-            "-t", str(SCENE_DURATION),
-            "-vf",
-            "zoompan=z='min(zoom+0.0005,1.08)':"
-            "x='iw/2-(iw/zoom/2)':"
-            "y='ih/2-(ih/zoom/2)':"
-            "d=1:s=1080x1920:fps=30,"
-            "format=yuv420p",
+            "-i", video_path,
+            "-i", overlay_path,
+            "-filter_complex",
+            "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
+            "crop=1080:1920,fps=30,setsar=1[bg];"
+            "[bg][1:v]overlay=0:0",
+            "-t", "5",
+            "-an",
             "-c:v", "libx264",
+            "-preset", "veryfast",
             "-pix_fmt", "yuv420p",
-            output
-        ], check=True)
+            output_path
+        ])
 
-        video_files.append(output)
+        clips.append(output_path)
 
-    # دمج المشاهد
+    if not clips:
+        raise RuntimeError("No video clips created")
+
     with open("frames.txt", "w", encoding="utf-8") as f:
-        for filename in video_files:
-            f.write(f"file '{filename}'\n")
+        for clip in clips:
+            f.write(f"file '{clip}'\n")
 
-    subprocess.run([
+    run_ffmpeg([
         "ffmpeg", "-y",
         "-f", "concat",
         "-safe", "0",
         "-i", "frames.txt",
         "-c", "copy",
         "joined.mp4"
-    ], check=True)
+    ])
 
-    # إضافة الموسيقى
     if os.path.exists(MUSIC):
-        subprocess.run([
+        run_ffmpeg([
             "ffmpeg", "-y",
             "-i", "joined.mp4",
             "-stream_loop", "-1",
@@ -188,11 +185,10 @@ def make_video():
             "-map", "1:a:0",
             "-c:v", "copy",
             "-c:a", "aac",
-            "-b:a", "192k",
             "-shortest",
             "-movflags", "+faststart",
             "modern_technology.mp4"
-        ], check=True)
+        ])
     else:
         os.replace("joined.mp4", "modern_technology.mp4")
 
@@ -201,4 +197,3 @@ def make_video():
 
 if __name__ == "__main__":
     make_video()
-
