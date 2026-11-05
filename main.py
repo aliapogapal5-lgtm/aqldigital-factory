@@ -1,94 +1,89 @@
 
-import os
 import json
+import os
 import time
 from datetime import date
-from google import genai
-from openai import OpenAI
-
-CHANNEL_NAME = "Modern Technology"
-
-PROMPT = """
-أنت كاتب محتوى محترف لقناة Modern Technology.
-أنشئ فيديو YouTube Shorts باللغة العربية المصرية.
-
-المجال: الذكاء الاصطناعي والتكنولوجيا والعمل الحر.
-المدة: 20 إلى 30 ثانية.
-بدون تعليق صوتي، نصوص على الشاشة وموسيقى فقط.
-
-أعد JSON فقط:
-{
-  "title": "عنوان جذاب",
-  "intro": "مقدمة تشد الانتباه",
-  "scenes": ["المشهد الأول", "المشهد الثاني", "المشهد الثالث", "المشهد الرابع"],
-  "description": "وصف الفيديو",
-  "hashtags": ["#تكنولوجيا"]
-}
-"""
+from pathlib import Path
 
 FALLBACKS = [
     {
-        "title": "موقع يوفر عليك وقت التصميم",
-        "intro": "لسه بتصمم كل حاجة من الصفر؟",
+        "title": "3 أدوات ذكاء اصطناعي توفر وقتك",
+        "intro": "بدل ما تضيع ساعات في شغلك، جرب الأدوات دي.",
         "scenes": [
-            "في أدوات بتساعدك تبدأ تصميمك بسرعة",
-            "اختار قالب مناسب لمشروعك",
-            "عدّل الألوان والنصوص والصور",
-            "احفظ تصميمك وابدأ شغلك"
+            "استخدم ChatGPT لكتابة الأفكار والنصوص.",
+            "استخدم Canva لتصميم صور احترافية.",
+            "استخدم CapCut لمونتاج الفيديوهات.",
+            "ابدأ بأداة واحدة واتعلم استخدامها كويس."
         ],
-        "description": "نصائح بسيطة لتطوير مهارات التصميم.",
-        "hashtags": ["#تصميم", "#تكنولوجيا", "#ModernTechnology"]
+        "description": "اكتشف أدوات تقنية توفر وقتك وتساعدك على الإنتاج.",
+        "hashtags": "#ذكاء_اصطناعي #تقنية #ModernTechnology"
     },
     {
-        "title": "3 مهارات رقمية اتعلمها",
-        "intro": "عايز تبدأ شغل أونلاين؟",
+        "title": "مهارات ممكن تبدأ تتعلمها من البيت",
+        "intro": "عايز تتعلم مهارة رقمية؟ ابدأ من هنا.",
         "scenes": [
-            "اتعلم تصميم الصور",
-            "اتعلم مونتاج الفيديو",
-            "اتعلم استخدام أدوات الذكاء الاصطناعي",
-            "ابدأ بمشروع صغير وطور مهاراتك"
+            "تعلم تصميم الصور باستخدام Canva.",
+            "تعلم مونتاج الفيديوهات باستخدام CapCut.",
+            "تعلم الترجمة وصناعة المحتوى.",
+            "اختار مهارة واحدة وابدأ التدريب يوميا."
         ],
-        "description": "مهارات رقمية مفيدة للمبتدئين.",
-        "hashtags": ["#العمل_الحر", "#مهارات", "#ModernTechnology"]
+        "description": "مهارات رقمية للمبتدئين.",
+        "hashtags": "#العمل_عبر_الإنترنت #مهارات #ModernTechnology"
     },
     {
-        "title": "استغل الذكاء الاصطناعي صح",
-        "intro": "الذكاء الاصطناعي ممكن يساعدك في شغلك!",
+        "title": "متخليش الذكاء الاصطناعي يضيع وقتك",
+        "intro": "الذكاء الاصطناعي أداة، مش بديل عن تفكيرك.",
         "scenes": [
-            "استخدمه لتوليد الأفكار",
-            "استفد منه في كتابة المحتوى",
-            "نظم مهامك ووقتك",
-            "راجع النتائج بنفسك قبل النشر"
+            "حدد المهمة اللي عايز تنفذها.",
+            "اكتب طلب واضح ومحدد.",
+            "راجع النتيجة وعدل الأخطاء.",
+            "استخدم النتيجة في شغلك بشكل احترافي."
         ],
-        "description": "طرق عملية للاستفادة من الذكاء الاصطناعي.",
-        "hashtags": ["#ذكاء_اصطناعي", "#AI", "#ModernTechnology"]
+        "description": "نصائح لاستخدام أدوات الذكاء الاصطناعي.",
+        "hashtags": "#AI #نصائح_تقنية #ModernTechnology"
     }
 ]
 
-def clean_json(result):
-    result = result.strip()
-    result = result.replace("```json", "").replace("```", "").strip()
-    return json.loads(result)
+PROMPT = """
+اكتب فكرة فيديو تقني قصير باللغة العربية.
+أعد JSON فقط بالشكل التالي:
+{
+"title": "عنوان جذاب",
+"intro": "مقدمة قصيرة",
+"scenes": ["مشهد 1", "مشهد 2", "مشهد 3", "مشهد 4"],
+"description": "وصف الفيديو",
+"hashtags": "#تقنية #ذكاء_اصطناعي"
+}
+اجعل المعلومات مفيدة وصحيحة ومناسبة لفيديو قصير.
+"""
 
-def generate_with_gemini():
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY is missing")
+def validate(data):
+    required = ["title", "intro", "scenes", "description", "hashtags"]
+    if not isinstance(data, dict):
+        raise ValueError("Invalid JSON")
+    for key in required:
+        if key not in data:
+            raise ValueError(f"Missing {key}")
+    if not isinstance(data["scenes"], list) or len(data["scenes"]) != 4:
+        raise ValueError("Expected exactly 4 scenes")
+    return data
 
-    client = genai.Client(api_key=api_key)
+def gemini():
+    from google import genai
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     response = client.models.generate_content(
         model="gemini-2.5-flash",
         contents=PROMPT
     )
-    return clean_json(response.text)
+    raw = response.text.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
+    return validate(json.loads(raw))
 
-def generate_with_sambanova():
-    api_key = os.environ.get("SAMBANOVA_API_KEY")
-    if not api_key:
-        raise RuntimeError("SAMBANOVA_API_KEY is missing")
-
+def sambanova():
+    from openai import OpenAI
     client = OpenAI(
-        api_key=api_key,
+        api_key=os.environ["SAMBANOVA_API_KEY"],
         base_url="https://api.sambanova.ai/v1"
     )
     response = client.chat.completions.create(
@@ -96,41 +91,36 @@ def generate_with_sambanova():
         messages=[{"role": "user", "content": PROMPT}],
         temperature=0.7
     )
-    return clean_json(response.choices[0].message.content)
+    raw = response.choices[0].message.content.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
+    return validate(json.loads(raw))
 
-def generate_daily_script():
-    data = None
+def generate():
+    if os.getenv("GEMINI_API_KEY"):
+        for attempt in range(2):
+            try:
+                print(f"Gemini attempt {attempt + 1}")
+                return gemini()
+            except Exception as e:
+                print("Gemini error:", str(e)[:300])
+                time.sleep(5)
 
-    for attempt in range(3):
+    if os.getenv("SAMBANOVA_API_KEY"):
         try:
-            print(f"Trying Gemini ({attempt + 1}/3)...")
-            data = generate_with_gemini()
-            print("Gemini succeeded!")
-            break
-        except Exception as error:
-            print(f"Gemini failed: {error}")
-            if attempt < 2:
-                time.sleep(15)
+            print("Trying SambaNova")
+            return sambanova()
+        except Exception as e:
+            print("SambaNova error:", str(e)[:300])
 
-    if data is None:
-        try:
-            print("Switching to SambaNova...")
-            data = generate_with_sambanova()
-            print("SambaNova succeeded!")
-        except Exception as error:
-            print(f"SambaNova failed: {error}")
-
-    if data is None:
-        index = date.today().toordinal() % len(FALLBACKS)
-        data = FALLBACKS[index]
-        print("Using offline fallback content.")
-
-    with open("daily_content.json", "w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False, indent=2)
-
-    print("Content ready!")
-    print(json.dumps(data, ensure_ascii=False, indent=2))
+    print("Using offline fallback content")
+    return FALLBACKS[date.today().toordinal() % len(FALLBACKS)]
 
 if __name__ == "__main__":
-    generate_daily_script()
+    content = generate()
+    Path("daily_content.json").write_text(
+        json.dumps(content, ensure_ascii=False, indent=2),
+        encoding="utf-8"
+    )
+    print("Content saved successfully")
 
