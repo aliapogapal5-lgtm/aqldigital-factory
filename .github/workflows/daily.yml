@@ -45,7 +45,9 @@ jobs:
           SAMBANOVA_API_KEY: ${{ secrets.SAMBANOVA_API_KEY }}
         run: python main.py
 
-      - name: Create video
+      - name: Create video with real footage
+        env:
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
         run: python video_maker.py
 
       - name: Save generated video
@@ -55,3 +57,4 @@ jobs:
           path: modern_technology.mp4
           if-no-files-found: error
           retention-days: 7
+
